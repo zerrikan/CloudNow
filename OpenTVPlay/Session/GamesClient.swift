@@ -15,7 +15,7 @@ actor GamesClient {
 
     func fetchMainGames(token: String, streamingBaseUrl: String = NVIDIAAuth.defaultStreamingUrl) async throws -> [GameInfo] {
         let vpcId = (try? await fetchVpcId(token: token, baseUrl: streamingBaseUrl)) ?? "GFN-PC"
-        return try await fetchPanels(token: token, panelNames: ["MainV2"], vpcId: vpcId)
+        return try await fetchPanels(token: token, panelNames: ["MAIN"], vpcId: vpcId)
     }
 
     // MARK: Fetch Library (owned/purchased games)
