@@ -16,7 +16,7 @@ enum NVIDIAAuth {
     static let scopes   = "openid consent email tk_client age"
     static let defaultIdpId = "PDiAhv2kJTFeQ7WOPqiQ2tRZ7lGhR2X11dXvM4TZSxg"
     static let defaultStreamingUrl = "https://prod.cloudmatchbeta.nvidiagrid.net/"
-    static let callbackScheme = "openvideo"
+    static let callbackScheme = "http"
 
     // Matches the official GFN PC client User-Agent so the NVIDIA backend accepts the token
     static let userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 NVIDIACEFClient/HEAD/debb5919f6 GFN-PC/2.0.80.173"
@@ -168,7 +168,7 @@ actor NVIDIAAuthAPI {
     @MainActor
     func login(provider: LoginProvider, pkce: PKCE) async throws -> AuthTokens {
         let nonce = randomHex(16)
-        let callbackURL = "\(NVIDIAAuth.callbackScheme)://callback"
+        let callbackURL = "http://localhost:2259"
         var comps = URLComponents(string: NVIDIAAuth.authEndpoint)!
         comps.queryItems = [
             URLQueryItem(name: "response_type", value: "code"),
