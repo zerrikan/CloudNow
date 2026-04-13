@@ -186,8 +186,17 @@ struct StreamView: View {
     // MARK: Actions
 
     private func startSession() async {
-        loadingPhase = .finding
+        // Reset stream controller (handles retry from failed/disconnected state)
+        streamController.disconnect()
+
+        // Stop any previously created server session before opening a new one
+        if let session = createdSession, let token = sessionToken {
+            try? await cloudMatchClient.stopSession(
+                sessionId: session.sessionId, token: token, base: session.streamingBaseUrl
+            )
+        }
         createdSession = nil
+        loadingPhase = .finding
         do {
             let token = try await authManager.resolveToken()
             sessionToken = token
@@ -248,7 +257,7 @@ struct StreamView: View {
                 createdSession = sessionInfo
             }
 
-            await streamController.connect(session: sessionInfo)
+            await streamController.connect(session: sessionInfo, settings: settings)
         } catch {
             // error will propagate to streamController.state via connect()
         }

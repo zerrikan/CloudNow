@@ -12,13 +12,16 @@ A native GeForce NOW client for Apple TV. Stream your entire PC game library dir
 
 - **Tab bar navigation** — Home, Library, Store, and Settings; fully focus-engine compatible
 - **Home screen** — "Continue Playing" row powered by live active sessions, plus a Favorites row
-- **Library & Store** — browse your linked games separately from the full public catalog
+- **Library & Store** — browse your linked games separately from the full public catalog; Store has search
 - **Stream quality settings** — resolution (720p/1080p/4K), frame rate, codec (H.264/H.265/AV1), and color quality (SDR/HDR) from the Settings tab
+- **Codec-aware SDP negotiation** — offer is filtered to your chosen codec before WebRTC negotiation; H.265 prefers Main profile; bandwidth hints sent to prevent server overshoot
+- **Session queue UI** — shows queue phase ("In queue · Position X" → "Preparing your game"), 90-second timeout, and requires two consecutive ready polls before presenting the stream
+- **Microphone support** — voice chat via AirPods or any Bluetooth headset; toggle in Settings; permission requested on first use
 - **Favorites** — heart any game in your Library; persisted locally
 - **Full GFN streaming** — WebRTC-based, up to 4K@60fps (subject to your GFN subscription tier)
 - **Controller support** — up to 4 simultaneous MFi/Xbox/PlayStation controllers via the GameController framework
 - **NVIDIA OAuth login** — PKCE flow; authentication completes on your paired iPhone via Handoff
-- **Live stats overlay** — bitrate, resolution, FPS, RTT, packet loss — toggle with the Menu button
+- **Live stats overlay** — bitrate, resolution, FPS, RTT, real packet loss % — toggle with the Menu button
 - **Keychain persistence** — session tokens stored securely and auto-refreshed on launch
 
 ## Requirements
@@ -72,6 +75,7 @@ OpenNowTV/
 ├── Streaming/
 │   ├── GFNStreamController.swift   WebRTC peer connection lifecycle (@Observable)
 │   ├── SignalingClient.swift        WebSocket signaling — SDP offer/answer + ICE
+│   ├── SDPMunger.swift             Codec filtering + bandwidth injection for WebRTC SDP
 │   └── InputSender.swift           GCController → XInput binary protocol → data channel
 ├── Video/
 │   └── VideoSurfaceView.swift      Metal-backed video surface (UIViewRepresentable)
@@ -104,17 +108,17 @@ The GFN streaming protocol was reverse-engineered by [OpenNOW](https://github.co
 ## Known Limitations
 
 - **No App Store.** NVIDIA has not published a public API for third-party GFN clients. Sideloading only.
-- **SDP munging not yet implemented.** Advanced codec negotiation (AV1, partial reliability) from OpenNOW's `sdp.ts` is not yet ported.
-- **No microphone support.** The server supports mic input over a second data channel; not implemented yet.
-- **No queue/ad handling.** During high demand, GFN queues sessions and shows ads. The app shows a spinner only.
+- **No ad/queue ad handling.** During high demand GFN may show ads while in queue. The app displays queue position but skips ad playback.
+- **No zone/region selection.** Sessions always use the default zone. Region routing requires zone discovery from the GFN API (not yet implemented).
+- **AV1 partial reliability not fully ported.** The input data channel uses reliable ordered delivery; the partially-reliable gamepad channel from OpenNOW's `sdp.ts` is not yet implemented.
 
 ## Contributing
 
 PRs welcome, especially for:
 
-- SDP munging (`Streaming/SDPProcessor.swift`)
-- Microphone support
-- Session queue / ad state UI
+- Zone/region discovery and selection UI
+- Session queue ad playback
+- AV1 partial-reliability input data channel
 - macOS Catalyst or visionOS port
 
 ## Sponsoring

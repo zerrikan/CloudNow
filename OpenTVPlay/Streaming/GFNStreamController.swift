@@ -3,6 +3,7 @@
 //   Product: WebRTC
 //
 
+import AVFoundation
 import Foundation
 import LiveKitWebRTC
 import Observation
@@ -47,6 +48,9 @@ final class GFNStreamController: NSObject {
     private var statsTimer: Timer?
     private var protocolVersion = 2
     private var sessionInfo: SessionInfo?
+    private var settings = StreamSettings()
+    private var micAudioSource: LKRTCAudioSource?
+    private var micAudioTrack: LKRTCAudioTrack?
 
     private static let factory: LKRTCPeerConnectionFactory = {
         LKRTCInitializeSSL()
@@ -57,10 +61,15 @@ final class GFNStreamController: NSObject {
 
     // MARK: Connect
 
-    func connect(session: SessionInfo) async {
-        guard state == .idle || state == .disconnected(reason: "") else { return }
+    func connect(session: SessionInfo, settings: StreamSettings) async {
+        // Block if already active; allow from idle, disconnected, or failed (retry case)
+        switch state {
+        case .connecting, .streaming: return
+        default: break
+        }
         state = .connecting
         sessionInfo = session
+        self.settings = settings
         stats.gpuType = session.gpuType ?? ""
 
         setupSignaling(session: session)
@@ -81,6 +90,8 @@ final class GFNStreamController: NSObject {
         peerConnection = nil
         inputDataChannel = nil
         videoTrack = nil
+        micAudioTrack = nil
+        micAudioSource = nil
         state = .idle
     }
 
@@ -147,8 +158,15 @@ final class GFNStreamController: NSObject {
         transceiverInit.direction = .recvOnly
         pc.addTransceiver(of: .video, init: transceiverInit)
 
-        // Set remote description (the server's offer)
-        let remoteSDP = LKRTCSessionDescription(type: .offer, sdp: sdp)
+        // Attach microphone audio track if enabled (must happen before answer creation
+        // so the m=audio sendrecv line is included in the SDP)
+        if settings.micEnabled {
+            await attachMicrophone(to: pc)
+        }
+
+        // Munge the remote offer: filter to preferred codec before setting remote description
+        let filteredSdp = SDPMunger.preferCodec(sdp, codec: settings.codec)
+        let remoteSDP = LKRTCSessionDescription(type: .offer, sdp: filteredSdp)
         try? await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
             pc.setRemoteDescription(remoteSDP) { error in
                 if let error { cont.resume(throwing: error) } else { cont.resume() }
@@ -167,16 +185,71 @@ final class GFNStreamController: NSObject {
                     if let sdp { cont.resume(returning: sdp) } else { cont.resume(throwing: StreamError.noSDP) }
                 }
             }
+            // Inject bandwidth hints into the answer
+            let maxBitrateKbps = settings.maxBitrateKbps / 1000
+            let mangledAnswerSdp = SDPMunger.injectBandwidth(answer.sdp, videoKbps: maxBitrateKbps)
+
             // Set local description
+            let localSDP = LKRTCSessionDescription(type: .answer, sdp: mangledAnswerSdp)
             try? await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-                pc.setLocalDescription(answer) { error in
+                pc.setLocalDescription(localSDP) { error in
                     if let error { cont.resume(throwing: error) } else { cont.resume() }
                 }
             }
-            signaling?.sendAnswer(sdp: answer.sdp)
+            signaling?.sendAnswer(sdp: mangledAnswerSdp, nvstSdp: buildNvstSdp())
         } catch {
             state = .failed(message: "Answer creation failed: \(error.localizedDescription)")
         }
+    }
+
+    // MARK: Private — NVST SDP
+
+    /// Builds the NVIDIA streaming protocol capability descriptor sent alongside the WebRTC answer.
+    /// Informs the server about audio/mic support and input data channel reliability settings.
+    private func buildNvstSdp() -> String {
+        var lines = [
+            "m=audio 0 RTP/AVP",
+            "a=msid:audio",
+        ]
+        if settings.micEnabled {
+            lines += [
+                "m=mic 0 RTP/AVP",
+                "a=msid:mic",
+                "a=rtpmap:0 PCMU/8000",
+            ]
+        }
+        lines += [
+            "m=application 0 RTP/AVP",
+            "a=msid:input_1",
+            "a=ri.partialReliableThresholdMs: 300",
+            "a=ri.hidDeviceMask: 0",
+            "a=ri.enablePartiallyReliableTransferGamepad: 65535",
+            "a=ri.enablePartiallyReliableTransferHid: 0",
+        ]
+        return lines.joined(separator: "\r\n")
+    }
+
+    // MARK: Private — Microphone
+
+    private func attachMicrophone(to pc: LKRTCPeerConnection) async {
+        let granted = await withCheckedContinuation { cont in
+            AVAudioSession.sharedInstance().requestRecordPermission { cont.resume(returning: $0) }
+        }
+        guard granted else { return }
+
+        let audioConstraints = LKRTCMediaConstraints(
+            mandatoryConstraints: nil,
+            optionalConstraints: [
+                "googEchoCancellation": "false",
+                "googAutoGainControl": "false",
+                "googNoiseSuppression": "false",
+            ]
+        )
+        let source = GFNStreamController.factory.audioSource(with: audioConstraints)
+        let track = GFNStreamController.factory.audioTrack(with: source, trackId: "mic")
+        micAudioSource = source
+        micAudioTrack = track
+        pc.add(track, streamIds: ["mic"])
     }
 
     private func addRemoteICE(candidate: String, sdpMid: String?, sdpMLineIndex: Int?) {

@@ -38,6 +38,13 @@ struct SettingsView: View {
                     }
                 }
 
+                Section("Microphone") {
+                    Toggle("Use Microphone", isOn: $vm.streamSettings.micEnabled)
+                    Text("Enables voice chat via a connected Bluetooth headset or AirPods. Requires microphone permission.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Section("Controller") {
                     LabeledContent("Deadzone", value: "15% (default)")
                     LabeledContent("Protocol", value: "XInput v2/v3")

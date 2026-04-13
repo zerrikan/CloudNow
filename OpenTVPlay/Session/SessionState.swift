@@ -11,6 +11,7 @@ struct StreamSettings: Codable, Equatable {
     var keyboardLayout: String = "en-US"
     var gameLanguage: String = "en_US"
     var enableL4S: Bool = false
+    var micEnabled: Bool = false
 }
 
 enum VideoCodec: String, Codable, CaseIterable {
