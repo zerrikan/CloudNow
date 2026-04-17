@@ -6,6 +6,10 @@ A native GeForce NOW client for Apple TV. Stream your entire PC game library dir
 
 > [!WARNING]
 > OpenNowTV is under active development. Expect bugs, lots of them
+
+
+
+
 ---
 
 ## Features
