@@ -146,11 +146,16 @@ final class AuthManager {
             session = refreshed
             try? persist(refreshed)
         } catch AuthError.tokenRefreshFailed {
-            // Both clientToken and refreshToken are gone — the stored session is unusable.
-            // Clear it so the login screen appears rather than silently producing bad sessions.
-            print("[Auth] All tokens exhausted on launch — clearing session, re-login required")
-            session = nil
-            KeychainService.delete()
+            // Only force re-login if the access token is actually expired. If it's still valid
+            // (we were just refreshing proactively) keep the session — it will work until expiry
+            // and retry on the next call.
+            if s.tokens.isExpired {
+                print("[Auth] Token expired and all refresh mechanisms exhausted — clearing session, re-login required")
+                session = nil
+                KeychainService.delete()
+            } else {
+                print("[Auth] Refresh failed but token still valid — keeping session, will retry on next call")
+            }
         } catch {
             // Network failures, server errors, etc. — keep the session and try again later.
         }
