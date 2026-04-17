@@ -43,11 +43,14 @@ struct StreamView: View {
         .ignoresSafeArea()
         .task { await startSession() }
         .onDisappear { streamController.disconnect() }
-        // Menu button toggles the HUD overlay
+        // During streaming, VideoSurfaceView is first responder and intercepts Menu via UIKit,
+        // signaling us through menuPressCount. .onExitCommand only fires in non-streaming states
+        // (loading, error) when the focus engine is active.
+        .onChange(of: streamController.menuPressCount) { _, _ in
+            toggleOverlay()
+        }
         .onExitCommand {
-            if streamController.state == .streaming {
-                toggleOverlay()
-            } else {
+            if streamController.state != .streaming {
                 disconnect()
             }
         }
