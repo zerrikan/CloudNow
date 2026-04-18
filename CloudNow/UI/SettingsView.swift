@@ -102,9 +102,24 @@ struct SettingsView: View {
 
                 Section("Controller") {
                     LabeledContent("Deadzone") {
-                        Text("\(Int(vm.streamSettings.controllerDeadzone * 100))%")
+                        HStack(spacing: 16) {
+                            Button {
+                                vm.streamSettings.controllerDeadzone = max(0.05, vm.streamSettings.controllerDeadzone - 0.01)
+                            } label: {
+                                Image(systemName: "minus.circle")
+                            }
+                            .buttonStyle(.plain)
+                            Text("\(Int(vm.streamSettings.controllerDeadzone * 100))%")
+                                .monospacedDigit()
+                                .frame(minWidth: 44)
+                            Button {
+                                vm.streamSettings.controllerDeadzone = min(0.30, vm.streamSettings.controllerDeadzone + 0.01)
+                            } label: {
+                                Image(systemName: "plus.circle")
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
-                    Slider(value: $vm.streamSettings.controllerDeadzone, in: 0.05...0.30, step: 0.01)
                     Text("Increase if your controller drifts at rest. Default: 15%.")
                         .font(.caption)
                         .foregroundStyle(.secondary)

@@ -88,7 +88,7 @@ struct LibraryView: View {
                     .buttonStyle(.card)
                     .contextMenu {
                         Button {
-                            viewModel.toggleFavorite(game)
+                            viewModel.toggleFavorite(game.id)
                         } label: {
                             let isFav = viewModel.favoriteIds.contains(game.id)
                             Label(

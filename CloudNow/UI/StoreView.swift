@@ -92,7 +92,7 @@ struct StoreView: View {
                         .contextMenu {
                             if game.isInLibrary {
                                 Button {
-                                    viewModel.toggleFavorite(game)
+                                    viewModel.toggleFavorite(game.id)
                                 } label: {
                                     let isFav = viewModel.favoriteIds.contains(game.id)
                                     Label(
