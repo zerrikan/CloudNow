@@ -4,19 +4,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-**OpenTVPlay** (branded OpenNowTV) is a native tvOS app — a reverse-engineered GeForce NOW client for Apple TV. It streams PC games over WebRTC using NVIDIA's GFN protocol over WebRTC, using [livekit/webrtc-xcframework](https://github.com/livekit/webrtc-xcframework) as the WebRTC transport.
+**CloudNow** is a native tvOS app — a reverse-engineered GeForce NOW client for Apple TV. It streams PC games over WebRTC using NVIDIA's GFN protocol over WebRTC, using [livekit/webrtc-xcframework](https://github.com/livekit/webrtc-xcframework) as the WebRTC transport.
 
 ## Building
 
 - **Xcode 16+**, targeting tvOS 17+
-- Open `OpenTVPlay.xcodeproj` in Xcode and build/run via Xcode (no command-line build setup)
+- Open `CloudNow.xcodeproj` in Xcode and build/run via Xcode (no command-line build setup)
 - **Required SPM dependency**: Add [livekit/webrtc-xcframework](https://github.com/livekit/webrtc-xcframework) via Xcode → File → Add Package Dependencies before building
 - Distribution is sideload-only (no App Store target)
 - No test suite, no linter configured
 
 ## Architecture
 
-All source lives in `OpenTVPlay/`. Five functional areas:
+All source lives in `CloudNow/`. Five functional areas:
 
 ### Auth
 - `AuthManager.swift` — `@Observable @MainActor` state holder. Checks Keychain on launch, drives device flow login, handles silent token refresh, and rebinds to a `client_token` grant so games.geforce.com GraphQL queries work.

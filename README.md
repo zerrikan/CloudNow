@@ -1,11 +1,11 @@
-# OpenNowTV
+# CloudNow
 
 A native GeForce NOW client for Apple TV. Stream your entire PC game library directly on tvOS with full controller support, no browser, no workarounds.
 
 > **Personal use / sideload only.** This project is not affiliated with, endorsed by, or sponsored by NVIDIA. NVIDIA and GeForce NOW are trademarks of NVIDIA Corporation.
 
 > [!WARNING]
-> OpenNowTV is under active development. Expect bugs, lots of them
+> CloudNow is under active development. Expect bugs, lots of them
 
 
 
@@ -41,13 +41,13 @@ A native GeForce NOW client for Apple TV. Stream your entire PC game library dir
 ### 1. Clone
 
 ```bash
-git clone https://github.com/owenselles/OpenNowTV.git
-cd OpenNowTV
+git clone https://github.com/owenselles/CloudNow.git
+cd CloudNow
 ```
 
 ### 2. Add the WebRTC package
 
-Open `OpenNowTV.xcodeproj` in Xcode, then:
+Open `CloudNow.xcodeproj` in Xcode, then:
 
 **File → Add Package Dependencies…**
 Paste: `https://github.com/livekit/webrtc-xcframework`
@@ -55,7 +55,7 @@ Target: **WebRTC**
 
 ### 3. Set your Team
 
-Xcode → OpenNowTV target → **Signing & Capabilities** → select your Apple Developer team.
+Xcode → CloudNow target → **Signing & Capabilities** → select your Apple Developer team.
 
 ### 4. Build & Run
 
@@ -68,7 +68,7 @@ On first launch the app prompts you to sign in. A QR code and PIN are displayed 
 ## Architecture
 
 ```
-OpenNowTV/
+CloudNow/
 ├── Auth/
 │   ├── AuthManager.swift           @Observable auth state, Keychain persistence
 │   └── NVIDIAAuthAPI.swift         OAuth 2.0 PKCE, token refresh, user info

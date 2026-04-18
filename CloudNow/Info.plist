@@ -3,6 +3,6 @@
 <plist version="1.0">
 <dict>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>OpenNowTV uses the microphone for voice chat during GeForce NOW game sessions.</string>
+	<string>CloudNow uses the microphone for voice chat during GeForce NOW game sessions.</string>
 </dict>
 </plist>

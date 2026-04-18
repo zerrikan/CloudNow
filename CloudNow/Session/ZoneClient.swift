@@ -105,7 +105,7 @@ actor ZoneClient {
     private func fetchQueueData() async throws -> [String: QueueEntry] {
         let url = URL(string: "https://api.printedwaste.com/gfn/queue/")!
         var req = URLRequest(url: url)
-        req.setValue("OpenNowTV/1.0 tvOS", forHTTPHeaderField: "User-Agent")
+        req.setValue("CloudNow/1.0 tvOS", forHTTPHeaderField: "User-Agent")
         req.timeoutInterval = 10
         let (data, _) = try await URLSession.shared.data(for: req)
         struct Response: Decodable { let data: [String: QueueEntry] }
@@ -115,7 +115,7 @@ actor ZoneClient {
     private func fetchMappingData() async throws -> [String: MappingEntry] {
         let url = URL(string: "https://remote.printedwaste.com/config/GFN_SERVERID_TO_REGION_MAPPING")!
         var req = URLRequest(url: url)
-        req.setValue("OpenNowTV/1.0 tvOS", forHTTPHeaderField: "User-Agent")
+        req.setValue("CloudNow/1.0 tvOS", forHTTPHeaderField: "User-Agent")
         req.timeoutInterval = 10
         let (data, _) = try await URLSession.shared.data(for: req)
         struct Response: Decodable { let data: [String: MappingEntry] }

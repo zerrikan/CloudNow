@@ -1,6 +1,6 @@
 //
-//  OpenTVPlayApp.swift
-//  OpenTVPlay
+//  CloudNowApp.swift
+//  CloudNow
 //
 //  Created by Owen Selles on 11/04/2026.
 //
@@ -8,7 +8,7 @@
 import SwiftUI
 
 @main
-struct OpenTVPlayApp: App {
+struct CloudNowApp: App {
     @State private var authManager = AuthManager()
 
     var body: some Scene {

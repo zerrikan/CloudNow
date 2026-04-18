@@ -52,7 +52,7 @@ struct PKCE {
 // MARK: - Keychain
 
 enum KeychainService {
-    private static let service = "com.owenselles.OpenTVPlay"
+    private static let service = "com.owenselles.CloudNow"
     private static let account = "gfn-auth-session"
 
     static func save(_ data: Data) throws {

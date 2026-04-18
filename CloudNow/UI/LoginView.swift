@@ -29,7 +29,7 @@ struct LoginView: View {
                 Image(systemName: "play.tv.fill")
                     .font(.system(size: 80))
                     .foregroundStyle(.white)
-                Text("OpenTVPlay")
+                Text("CloudNow")
                     .font(.system(size: 52, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
                 Text("GeForce NOW for Apple TV")
