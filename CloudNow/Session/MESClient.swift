@@ -45,7 +45,9 @@ actor MESClient {
         request.setValue("ec7e38d4-03af-4b58-b131-cfb0495903ab", forHTTPHeaderField: "nv-client-id")
         request.setValue("NATIVE", forHTTPHeaderField: "nv-client-type")
         request.setValue("2.0.80.173", forHTTPHeaderField: "nv-client-version")
-        request.setValue("WEBRTC", forHTTPHeaderField: "nv-client-streamer")
+        request.setValue("NVIDIA-CLASSIC", forHTTPHeaderField: "nv-client-streamer")
+        request.setValue("WINDOWS",        forHTTPHeaderField: "nv-device-os")
+        request.setValue("DESKTOP",        forHTTPHeaderField: "nv-device-type")
         request.setValue(NVIDIAAuth.userAgent, forHTTPHeaderField: "User-Agent")
         let (data, resp) = try await urlSession.data(for: request)
         guard (resp as? HTTPURLResponse)?.statusCode == 200 else {
