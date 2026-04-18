@@ -31,6 +31,12 @@ class GamesViewModel {
            let settings = try? JSONDecoder().decode(StreamSettings.self, from: data) {
             self.streamSettings = settings
         }
+        // tvOS currently caps at 60 Hz; clamp any saved value to the screen maximum.
+        // If Apple raises the cap in a future tvOS release this will automatically unlock.
+        let screenMax = UIScreen.main.maximumFramesPerSecond
+        if streamSettings.fps > screenMax {
+            streamSettings.fps = screenMax
+        }
     }
 
     // MARK: Computed — Entitled Resolutions & FPS
@@ -49,17 +55,20 @@ class GamesViewModel {
         }
     }
 
-    /// FPS values available for the currently selected resolution.
+    /// FPS values available for the currently selected resolution, capped to the
+    /// screen's maximum refresh rate. Today tvOS caps at 60 Hz; if Apple raises it
+    /// in a future update this will automatically expose the higher option.
     var availableFps: [Int] {
+        let maxFps = UIScreen.main.maximumFramesPerSecond
         guard let resos = subscription?.entitledResolutions, !resos.isEmpty else {
-            return [30, 60]
+            return [30, 60].filter { $0 <= maxFps }
         }
         let parts = streamSettings.resolution.split(separator: "x").compactMap { Int($0) }
         let w = parts.first ?? 1920
         let h = parts.last  ?? 1080
         let matching = resos.filter { $0.widthInPixels == w && $0.heightInPixels == h }
         let source = matching.isEmpty ? resos : matching
-        return Array(Set(source.map(\.framesPerSecond))).sorted()
+        return Array(Set(source.map(\.framesPerSecond))).filter { $0 <= maxFps }.sorted()
     }
 
     // MARK: Computed — Games
