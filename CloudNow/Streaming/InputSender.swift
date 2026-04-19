@@ -519,6 +519,7 @@ final class InputSender {
 
         // Seed gamepadBitmap for controllers already connected before InputSender started
         for controller in GCController.controllers() where controller.extendedGamepad != nil {
+            claimControllerInput(controller)
             let idx = GCController.controllers().firstIndex(where: { $0 === controller }) ?? 0
             gamepadBitmap |= (1 << UInt8(idx & 3))
         }
@@ -571,8 +572,25 @@ final class InputSender {
         input.scroll.valueChangedHandler = nil
     }
 
+    private func claimControllerInput(_ controller: GCController) {
+        guard let pad = controller.extendedGamepad else { return }
+        // Prevent tvOS from intercepting any face/shoulder button as system navigation
+        // (O/Circle and B are mapped to "back" by the OS by default)
+        let buttons: [GCControllerButtonInput?] = [
+            pad.buttonA, pad.buttonB, pad.buttonX, pad.buttonY,
+            pad.buttonMenu, pad.buttonOptions,
+            pad.leftShoulder, pad.rightShoulder,
+            pad.leftTrigger, pad.rightTrigger,
+            pad.leftThumbstickButton, pad.rightThumbstickButton,
+        ]
+        for btn in buttons.compactMap({ $0 }) {
+            btn.preferredSystemGestureState = .disabled
+        }
+    }
+
     private func controllerConnected(_ controller: GCController) {
         guard controller.extendedGamepad != nil else { return }
+        claimControllerInput(controller)
         let idx = GCController.controllers().firstIndex(where: { $0 === controller }) ?? 0
         gamepadBitmap |= (1 << UInt8(idx & 3))
         let data = encoder.encodeGamepad(
