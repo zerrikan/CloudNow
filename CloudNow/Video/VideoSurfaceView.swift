@@ -26,6 +26,10 @@ final class VideoSurfaceView: UIView {
     /// the press bubble up to the system (which opens the Apple TV control center).
     var menuPressHandler: (() -> Void)?
 
+    /// When true, an extended gamepad owns input. UIKit presses from the controller
+    /// (e.g. Options mapping to .playPause) are suppressed to avoid double-firing the overlay.
+    var gamepadModeActive = false
+
     var videoTrack: LKRTCVideoTrack? {
         didSet {
             guard oldValue !== videoTrack else { return }
@@ -78,10 +82,10 @@ final class VideoSurfaceView: UIView {
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         var handled = false
         for press in presses {
-            if press.type == .playPause {
-                // Play/Pause toggles the HUD overlay. Unlike Menu, this button has no
-                // OS-level override, so marking it handled here fully suppresses system action.
-                // GFNStreamController increments menuPressCount so SwiftUI reacts via .onChange.
+            if press.type == .playPause && !gamepadModeActive {
+                // Play/Pause toggles the HUD overlay (Siri Remote only).
+                // Suppressed when a gamepad is in control — the overlay is toggled there
+                // via Options long press detected in InputSender.tick().
                 menuPressHandler?()
                 handled = true
             } else if let key = press.key, let mapping = Self.hidToKeyMapping[key.keyCode] {
