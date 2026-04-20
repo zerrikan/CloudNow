@@ -2,6 +2,19 @@ import Foundation
 import Observation
 import UIKit
 
+struct ResumableSession {
+    let game: GameInfo
+    let session: SessionInfo
+    let leftAt: Date
+    /// Grace window before we stop offering to resume (GFN keeps the session ~2 min).
+    static let gracePeriod: TimeInterval = 110
+
+    var secondsRemaining: Int {
+        max(0, Int(Self.gracePeriod - Date().timeIntervalSince(leftAt)))
+    }
+    var isExpired: Bool { secondsRemaining == 0 }
+}
+
 @Observable
 class GamesViewModel {
     var mainGames: [GameInfo] = []
@@ -15,6 +28,8 @@ class GamesViewModel {
     var recentlyPlayedIds: [String] = []
     var streamSettings: StreamSettings = StreamSettings()
     var subscription: SubscriptionInfo? = nil
+    /// Session the user left without ending — available to resume for ~2 minutes.
+    var resumableSession: ResumableSession? = nil
 
     private let gamesClient = GamesClient()
     private let cloudMatchClient = CloudMatchClient()

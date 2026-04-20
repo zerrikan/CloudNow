@@ -302,11 +302,10 @@ func mapGCControllerToXInput(_ controller: GCController, deadzone: Float = 0.15)
     let lt = UInt8(clamping: Int(pad.leftTrigger.value * 255))
     let rt = UInt8(clamping: Int(pad.rightTrigger.value * 255))
 
-    // XInput Y axis is inverted (positive = up)
     let lx = normalizeAxis(pad.leftThumbstick.xAxis.value, deadzone: deadzone)
-    let ly = normalizeAxis(-pad.leftThumbstick.yAxis.value, deadzone: deadzone)
+    let ly = normalizeAxis(pad.leftThumbstick.yAxis.value, deadzone: deadzone)
     let rx = normalizeAxis(pad.rightThumbstick.xAxis.value, deadzone: deadzone)
-    let ry = normalizeAxis(-pad.rightThumbstick.yAxis.value, deadzone: deadzone)
+    let ry = normalizeAxis(pad.rightThumbstick.yAxis.value, deadzone: deadzone)
 
     return (buttons, lt, rt, lx, ly, rx, ry)
 }
@@ -342,6 +341,9 @@ final class InputSender {
     /// When true, Siri Remote and keyboard/mouse input is suppressed (e.g. while the HUD is visible).
     var isPaused = false
 
+    /// Called when the user long-presses the Options button to toggle the stats overlay.
+    var menuToggleHandler: (() -> Void)?
+
     private weak var channel: DataChannelSender?
     let encoder = InputEncoder()
     private var sendTimer: Timer?
@@ -354,6 +356,11 @@ final class InputSender {
     // Siri Remote state tracking
     private var lastMicroDpad: (x: Float, y: Float) = (0, 0)
     private var lastMicroButtonA = false
+
+    // Per-controller Options button hold duration (ticks at 60 Hz)
+    private var optionsHoldTicks: [Int: Int] = [:]
+    // ~600 ms at 60 Hz
+    private static let optionsLongPressThreshold = 36
 
     init(channel: DataChannelSender) {
         self.channel = channel
@@ -393,6 +400,15 @@ final class InputSender {
         remoteMode = (remoteMode == .mouse) ? .gamepad : .mouse
         lastMicroDpad = (0, 0)
         lastMicroButtonA = false
+        optionsHoldTicks.removeAll()
+        // Update system gesture ownership for all connected extended gamepads
+        for controller in GCController.controllers() where controller.extendedGamepad != nil {
+            if remoteMode == .gamepad {
+                claimControllerInput(controller)
+            } else {
+                releaseControllerInput(controller)
+            }
+        }
     }
 
     // MARK: Private — Tick
@@ -404,26 +420,50 @@ final class InputSender {
 
         if extended.isEmpty && micro.isEmpty { return }
 
-        // Extended gamepads — existing XInput encoding
-        for (idx, controller) in extended.prefix(4).enumerated() {
-            let (btns, lt, rt, lx, ly, rx, ry) = mapGCControllerToXInput(controller, deadzone: deadzone)
-            let data = encoder.encodeGamepad(
-                controllerId: idx,
-                buttons: btns,
-                leftTrigger: lt,
-                rightTrigger: rt,
-                leftStickX: lx,
-                leftStickY: ly,
-                rightStickX: rx,
-                rightStickY: ry,
-                gamepadBitmap: gamepadBitmap
-            )
-            channel?.sendData(data)
-        }
+        if remoteMode == .gamepad {
+            // Gamepad mode: extended controller owns the game; remote is suppressed when
+            // a real controller is present (otherwise the remote's empty state overwrites it).
+            for (idx, controller) in extended.prefix(4).enumerated() {
+                let (btns, lt, rt, lx, ly, rx, ry) = mapGCControllerToXInput(controller, deadzone: deadzone)
+                let data = encoder.encodeGamepad(
+                    controllerId: idx,
+                    buttons: btns,
+                    leftTrigger: lt,
+                    rightTrigger: rt,
+                    leftStickX: lx,
+                    leftStickY: ly,
+                    rightStickX: rx,
+                    rightStickY: ry,
+                    gamepadBitmap: gamepadBitmap
+                )
+                channel?.sendData(data)
 
-        // Siri Remote — handle only when not paused
-        if !isPaused, let remote = micro.first {
-            handleMicroGamepad(remote)
+                // Long press Options → toggle stats overlay
+                if let pad = controller.extendedGamepad {
+                    let held = pad.buttonOptions?.isPressed ?? false
+                    if held {
+                        let ticks = (optionsHoldTicks[idx] ?? 0) + 1
+                        optionsHoldTicks[idx] = ticks
+                        if ticks == Self.optionsLongPressThreshold {
+                            menuToggleHandler?()
+                        }
+                    } else {
+                        optionsHoldTicks[idx] = 0
+                    }
+                }
+            }
+
+            // Only use the Siri Remote as a gamepad when no real controller is connected
+            if extended.isEmpty, !isPaused, let remote = micro.first {
+                handleMicroGamepad(remote)
+            }
+        } else {
+            // Mouse mode: extended controller is handed back to tvOS for system navigation.
+            // Only the Siri Remote sends input to the game.
+            optionsHoldTicks.removeAll()
+            if !isPaused, let remote = micro.first {
+                handleMicroGamepad(remote)
+            }
         }
     }
 
@@ -518,6 +558,14 @@ final class InputSender {
         observations = [connectObs, disconnectObs, mouseConnectObs, mouseDisconnectObs]
         GCController.startWirelessControllerDiscovery()
 
+        // Seed gamepadBitmap for controllers already connected before InputSender started.
+        // System gesture ownership is only claimed when in gamepad mode (starts as .mouse).
+        for controller in GCController.controllers() where controller.extendedGamepad != nil {
+            if remoteMode == .gamepad { claimControllerInput(controller) }
+            let idx = GCController.controllers().firstIndex(where: { $0 === controller }) ?? 0
+            gamepadBitmap |= (1 << UInt8(idx & 3))
+        }
+
         // Wire up any mice already connected at start time
         for mouse in GCMouse.mice() {
             setupMouseHandlers(for: mouse)
@@ -566,8 +614,41 @@ final class InputSender {
         input.scroll.valueChangedHandler = nil
     }
 
+    private func claimControllerInput(_ controller: GCController) {
+        guard let pad = controller.extendedGamepad else { return }
+        // Prevent tvOS from intercepting any face/shoulder button as system navigation
+        // (O/Circle and B are mapped to "back" by the OS by default)
+        let buttons: [GCControllerButtonInput?] = [
+            pad.buttonA, pad.buttonB, pad.buttonX, pad.buttonY,
+            pad.buttonMenu, pad.buttonOptions,
+            pad.leftShoulder, pad.rightShoulder,
+            pad.leftTrigger, pad.rightTrigger,
+            pad.leftThumbstickButton, pad.rightThumbstickButton,
+        ]
+        for btn in buttons.compactMap({ $0 }) {
+            btn.preferredSystemGestureState = .disabled
+        }
+    }
+
+    private func releaseControllerInput(_ controller: GCController) {
+        guard let pad = controller.extendedGamepad else { return }
+        let buttons: [GCControllerButtonInput?] = [
+            pad.buttonA, pad.buttonB, pad.buttonX, pad.buttonY,
+            pad.buttonMenu, pad.buttonOptions,
+            pad.leftShoulder, pad.rightShoulder,
+            pad.leftTrigger, pad.rightTrigger,
+            pad.leftThumbstickButton, pad.rightThumbstickButton,
+        ]
+        for btn in buttons.compactMap({ $0 }) {
+            btn.preferredSystemGestureState = .enabled
+        }
+    }
+
     private func controllerConnected(_ controller: GCController) {
         guard controller.extendedGamepad != nil else { return }
+        // Only take ownership of buttons when already in gamepad mode;
+        // in mouse mode the controller is left for tvOS system navigation.
+        if remoteMode == .gamepad { claimControllerInput(controller) }
         let idx = GCController.controllers().firstIndex(where: { $0 === controller }) ?? 0
         gamepadBitmap |= (1 << UInt8(idx & 3))
         let data = encoder.encodeGamepad(

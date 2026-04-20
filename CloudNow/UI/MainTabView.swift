@@ -5,20 +5,28 @@ struct MainTabView: View {
     @State private var viewModel = GamesViewModel()
     @State private var gameToPlay: GameInfo?
     @State private var sessionToResume: ActiveSessionInfo? = nil
+    @State private var directSessionToResume: SessionInfo? = nil
 
     var body: some View {
         TabView {
             Tab("Home", systemImage: "house.fill") {
-                HomeView(onPlay: { game in
-                    // If this game has an active session, set it up for resume
-                    sessionToResume = viewModel.activeSessions.first { session in
-                        game.variants.contains { v in
-                            guard let appId = v.appId, let sessionAppId = session.appId else { return false }
-                            return appId == sessionAppId
+                HomeView(
+                    onPlay: { game in
+                        directSessionToResume = nil
+                        sessionToResume = viewModel.activeSessions.first { session in
+                            game.variants.contains { v in
+                                guard let appId = v.appId, let sessionAppId = session.appId else { return false }
+                                return appId == sessionAppId
+                            }
                         }
+                        gameToPlay = game
+                    },
+                    onResume: { rs in
+                        directSessionToResume = rs.session
+                        sessionToResume = nil
+                        gameToPlay = rs.game
                     }
-                    gameToPlay = game
-                })
+                )
             }
             Tab("Library", systemImage: "books.vertical.fill") {
                 LibraryView(games: viewModel.libraryGames, onPlay: { gameToPlay = $0 })
@@ -34,8 +42,8 @@ struct MainTabView: View {
         .task { await viewModel.load(authManager: authManager) }
         .onChange(of: viewModel.streamSettings) { viewModel.saveSettings() }
         .onChange(of: gameToPlay) { _, new in
-            // Refresh active sessions when the user exits a game
             if new == nil {
+                directSessionToResume = nil
                 Task { await viewModel.refreshActiveSessions(authManager: authManager) }
             }
         }
@@ -44,9 +52,17 @@ struct MainTabView: View {
                 game: game,
                 settings: viewModel.streamSettings,
                 existingSession: sessionToResume,
+                directSession: directSessionToResume,
                 onDismiss: {
                     gameToPlay = nil
                     sessionToResume = nil
+                },
+                onLeave: { leftGame, session in
+                    viewModel.resumableSession = ResumableSession(
+                        game: leftGame,
+                        session: session,
+                        leftAt: Date()
+                    )
                 }
             )
             .environment(authManager)

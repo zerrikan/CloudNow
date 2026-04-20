@@ -129,6 +129,7 @@ final class GFNStreamController: NSObject {
     func toggleRemoteMode() {
         inputSender?.toggleRemoteMode()
         remoteMode = inputSender?.remoteMode ?? .mouse
+        videoView?.gamepadModeActive = (remoteMode == .gamepad)
     }
 
     func setInputPaused(_ paused: Bool) {
@@ -756,6 +757,7 @@ extension GFNStreamController: LKRTCDataChannelDelegate {
             let sender = InputSender(channel: self)
             sender.setProtocolVersion(version)
             sender.deadzone = Float(self.settings.controllerDeadzone)
+            sender.menuToggleHandler = { [weak self] in self?.handleMenuPress() }
             sender.start()
             self.inputSender = sender
             // Forward keyboard/mouse events from the video surface to the sender

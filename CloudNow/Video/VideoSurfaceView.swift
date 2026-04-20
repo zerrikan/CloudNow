@@ -26,6 +26,10 @@ final class VideoSurfaceView: UIView {
     /// the press bubble up to the system (which opens the Apple TV control center).
     var menuPressHandler: (() -> Void)?
 
+    /// When true, an extended gamepad owns input. UIKit presses from the controller
+    /// (e.g. Options mapping to .playPause) are suppressed to avoid double-firing the overlay.
+    var gamepadModeActive = false
+
     var videoTrack: LKRTCVideoTrack? {
         didSet {
             guard oldValue !== videoTrack else { return }
@@ -78,10 +82,15 @@ final class VideoSurfaceView: UIView {
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         var handled = false
         for press in presses {
-            if press.type == .playPause {
-                // Play/Pause toggles the HUD overlay. Unlike Menu, this button has no
-                // OS-level override, so marking it handled here fully suppresses system action.
-                // GFNStreamController increments menuPressCount so SwiftUI reacts via .onChange.
+            if press.type == .menu && gamepadModeActive {
+                // In gamepad mode, O/Circle generates a .menu UIKit press that would trigger
+                // system back navigation. Consume it here so the OS never sees it.
+                // The button input still reaches the game via GCController polling.
+                handled = true
+            } else if press.type == .playPause && !gamepadModeActive {
+                // Play/Pause toggles the HUD overlay (Siri Remote only).
+                // Suppressed when a gamepad is in control — the overlay is toggled there
+                // via Options long press detected in InputSender.tick().
                 menuPressHandler?()
                 handled = true
             } else if let key = press.key, let mapping = Self.hidToKeyMapping[key.keyCode] {
@@ -258,23 +267,39 @@ private final class WebRTCFrameRenderer: NSObject, LKRTCVideoRenderer {
     }
 }
 
+// MARK: - Streaming View Controller
+
+import GameController
+
+/// GCEventViewController subclass whose view IS the VideoSurfaceView.
+/// controllerUserInteractionEnabled = false prevents tvOS from routing any
+/// game-controller button (especially O/Circle → system back) through the
+/// focus engine while this VC is in the hierarchy.
+final class StreamingViewController: GCEventViewController {
+    let videoSurface = VideoSurfaceView()
+
+    override func loadView() {
+        controllerUserInteractionEnabled = false
+        view = videoSurface
+    }
+}
+
 // MARK: - SwiftUI Wrapper
 
 import SwiftUI
 
-struct VideoSurfaceViewRepresentable: UIViewRepresentable {
+struct VideoSurfaceViewRepresentable: UIViewControllerRepresentable {
     let streamController: GFNStreamController
 
-    func makeUIView(context: Context) -> VideoSurfaceView {
-        let view = VideoSurfaceView()
-        // Bind on the next main-actor turn (makeUIView is not @MainActor but runs on main thread)
+    func makeUIViewController(context: Context) -> StreamingViewController {
+        let vc = StreamingViewController()
         Task { @MainActor in
-            streamController.bindVideoView(view)
+            streamController.bindVideoView(vc.videoSurface)
         }
-        return view
+        return vc
     }
 
-    func updateUIView(_ uiView: VideoSurfaceView, context: Context) {
-        uiView.videoTrack = streamController.videoTrack
+    func updateUIViewController(_ vc: StreamingViewController, context: Context) {
+        vc.videoSurface.videoTrack = streamController.videoTrack
     }
 }

@@ -12,7 +12,11 @@ struct StreamView: View {
     let game: GameInfo
     var settings: StreamSettings = StreamSettings()
     var existingSession: ActiveSessionInfo? = nil
+    /// When set, skips CloudMatch entirely and reconnects WebRTC directly using the stored session.
+    var directSession: SessionInfo? = nil
     let onDismiss: () -> Void
+    /// Called when the user leaves without ending the session so the caller can offer a resume.
+    var onLeave: ((GameInfo, SessionInfo) -> Void)? = nil
 
     @Environment(AuthManager.self) var authManager
     @Environment(GamesViewModel.self) var viewModel
@@ -141,11 +145,11 @@ struct StreamView: View {
         }
         .animation(.easeInOut(duration: 0.4), value: streamController.timeWarning)
         .animation(.easeInOut(duration: 0.2), value: showOverlay)
-        .alert("Exit Game?", isPresented: $showExitConfirmation) {
-            Button("Exit", role: .destructive) { disconnect() }
+        .alert("End Session?", isPresented: $showExitConfirmation) {
+            Button("End Session", role: .destructive) { disconnect() }
             Button("Keep Playing", role: .cancel) { }
         } message: {
-            Text("Your session will end and progress will be saved in-game.")
+            Text("This will end your GeForce NOW session. To return later, use Leave Game instead.")
         }
     }
 
@@ -173,13 +177,22 @@ struct StreamView: View {
                     )
                     .frame(minWidth: 180)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.borderedProminent)
+                .tint(.white)
+
+                Button {
+                    leave()
+                } label: {
+                    Label("Leave Game", systemImage: "house")
+                        .frame(minWidth: 180)
+                }
+                .buttonStyle(.borderedProminent)
                 .tint(.white)
 
                 Button(role: .destructive) {
                     showExitConfirmation = true
                 } label: {
-                    Label("Exit Game", systemImage: "xmark.circle")
+                    Label("End Session", systemImage: "xmark.circle")
                         .frame(minWidth: 180)
                 }
                 .buttonStyle(.bordered)
@@ -350,6 +363,54 @@ struct StreamView: View {
         // Reset stream controller (handles retry from failed/disconnected state)
         streamController.disconnect()
 
+        // Reconnect path — RESUME PUT tells the server to rebuild its media endpoint,
+        // then connect WebRTC as soon as we get a single status 2/3 (no double-poll wait).
+        if let direct = directSession {
+            loadingPhase = .preparing
+            do {
+                let token = try await authManager.resolveToken()
+                sessionToken = token
+                let provider = authManager.session?.provider
+                let streamingBaseUrl = provider?.streamingServiceUrl ?? NVIDIAAuth.defaultStreamingUrl
+                let base = streamingBaseUrl.hasSuffix("/") ? String(streamingBaseUrl.dropLast()) : streamingBaseUrl
+
+                var sessionInfo = try await cloudMatchClient.claimSession(
+                    sessionId: direct.sessionId,
+                    serverIp: direct.serverIp,
+                    token: token,
+                    base: base,
+                    settings: settings
+                )
+                createdSession = sessionInfo
+
+                // Poll until ready, but only need a single status 2/3 (server media is up).
+                let timeout: TimeInterval = 60
+                let start = Date()
+                while sessionInfo.status != 2 && sessionInfo.status != 3 {
+                    if Date().timeIntervalSince(start) > timeout {
+                        loadingPhase = .timedOut
+                        return
+                    }
+                    try await Task.sleep(for: .seconds(2))
+                    sessionInfo = try await cloudMatchClient.pollSession(
+                        sessionId: sessionInfo.sessionId,
+                        token: token,
+                        base: sessionInfo.streamingBaseUrl,
+                        serverIp: sessionInfo.serverIp.isEmpty ? nil : sessionInfo.serverIp,
+                        clientId: sessionInfo.clientId,
+                        deviceId: sessionInfo.deviceId
+                    )
+                    createdSession = sessionInfo
+                }
+
+                viewModel.recordPlayed(game)
+                await streamController.connect(session: sessionInfo, settings: settings)
+            } catch {
+                streamController.fail(with: error.localizedDescription)
+            }
+            return
+        }
+
         // Stop any previously created server session before opening a new one.
         // Skip for resume — we want to keep the existing session alive.
         if let session = createdSession, let token = sessionToken, existingSession == nil {
@@ -454,7 +515,19 @@ struct StreamView: View {
         }
     }
 
+    // Leaves the stream locally without stopping the server session.
+    // GFN keeps the session alive for ~1–2 minutes so it can be resumed from home.
+    private func leave() {
+        if let session = createdSession {
+            onLeave?(game, session)
+        }
+        streamController.disconnect()
+        onDismiss()
+    }
+
     private func disconnect() {
+        // Intentional end — clear any pending resumable session
+        viewModel.resumableSession = nil
         // Tell the server to stop the session so it doesn't linger
         if let session = createdSession, let token = sessionToken {
             Task {
