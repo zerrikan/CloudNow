@@ -14,9 +14,16 @@ struct StreamSettings: Codable, Equatable {
     var micEnabled: Bool = false
     /// Radial deadzone applied to analog stick axes (0.0–1.0). Default 15%.
     var controllerDeadzone: Double = 0.15
+    /// Which controller button triggers the GFN overlay on long-press. Default: Start (≡).
+    var overlayTriggerButton: OverlayTriggerButton = .start
     /// Preferred zone URL, e.g. "https://np-aws-us-n-virginia-1.cloudmatchbeta.nvidiagrid.net/"
     /// nil = let the GFN default VPC handle routing.
     var preferredZoneUrl: String? = nil
+}
+
+enum OverlayTriggerButton: String, Codable, CaseIterable {
+    case start   = "Start (≡)"
+    case options = "Options/Back (⊟)"
 }
 
 enum VideoCodec: String, Codable, CaseIterable {

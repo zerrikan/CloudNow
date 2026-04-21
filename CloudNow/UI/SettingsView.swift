@@ -152,6 +152,14 @@ struct SettingsView: View {
                     Text("Increase if your controller drifts at rest. Default: 15%.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    Picker("Overlay Button", selection: $vm.streamSettings.overlayTriggerButton) {
+                        ForEach(OverlayTriggerButton.allCases, id: \.self) { btn in
+                            Text(btn.rawValue).tag(btn)
+                        }
+                    }
+                    Text("Long-press this button during play to open the GFN overlay. Switch if it conflicts with an in-game action.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     LabeledContent("Protocol", value: "XInput v2/v3")
                 }
 

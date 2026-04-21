@@ -341,8 +341,11 @@ final class InputSender {
     /// When true, Siri Remote and keyboard/mouse input is suppressed (e.g. while the HUD is visible).
     var isPaused = false
 
-    /// Called when the user long-presses the Options button to toggle the stats overlay.
+    /// Called when the user long-presses the overlay trigger button to toggle the GFN overlay.
     var menuToggleHandler: (() -> Void)?
+
+    /// Which controller button triggers the overlay on long-press. Matches StreamSettings.overlayTriggerButton.
+    var overlayTriggerButton: OverlayTriggerButton = .start
 
     /// Called when remoteMode changes due to controller connect/disconnect auto-switching.
     var onRemoteModeChanged: ((RemoteInputMode) -> Void)?
@@ -360,10 +363,10 @@ final class InputSender {
     private var lastMicroDpad: (x: Float, y: Float) = (0, 0)
     private var lastMicroButtonA = false
 
-    // Per-controller Options button hold duration (ticks at 60 Hz)
-    private var optionsHoldTicks: [Int: Int] = [:]
-    // ~600 ms at 60 Hz
-    private static let optionsLongPressThreshold = 36
+    // Per-controller overlay trigger hold duration (ticks at 60 Hz)
+    private var overlayHoldTicks: [Int: Int] = [:]
+    // ~1 s at 60 Hz
+    private static let overlayLongPressThreshold = 60
 
     init(channel: DataChannelSender) {
         self.channel = channel
@@ -403,7 +406,7 @@ final class InputSender {
         remoteMode = (remoteMode == .mouse) ? .gamepad : .mouse
         lastMicroDpad = (0, 0)
         lastMicroButtonA = false
-        optionsHoldTicks.removeAll()
+        overlayHoldTicks.removeAll()
         // Update system gesture ownership for all connected extended gamepads
         for controller in GCController.controllers() where controller.extendedGamepad != nil {
             if remoteMode == .gamepad {
@@ -427,7 +430,32 @@ final class InputSender {
             // Gamepad mode: extended controller owns the game; remote is suppressed when
             // a real controller is present (otherwise the remote's empty state overwrites it).
             for (idx, controller) in extended.prefix(4).enumerated() {
-                let (btns, lt, rt, lx, ly, rx, ry) = mapGCControllerToXInput(controller, deadzone: deadzone)
+                var (btns, lt, rt, lx, ly, rx, ry) = mapGCControllerToXInput(controller, deadzone: deadzone)
+
+                // Long-press overlay trigger → show GFN overlay.
+                // Runs before sendData so we can clear the triggering bit,
+                // preventing the in-game action from firing simultaneously.
+                if let pad = controller.extendedGamepad {
+                    let held: Bool
+                    switch overlayTriggerButton {
+                    case .start:   held = pad.buttonMenu.isPressed
+                    case .options: held = pad.buttonOptions?.isPressed ?? false
+                    }
+                    if held {
+                        let ticks = (overlayHoldTicks[idx] ?? 0) + 1
+                        overlayHoldTicks[idx] = ticks
+                        if ticks == Self.overlayLongPressThreshold {
+                            switch overlayTriggerButton {
+                            case .start:   btns &= ~GFNInput.start
+                            case .options: btns &= ~GFNInput.back
+                            }
+                            menuToggleHandler?()
+                        }
+                    } else {
+                        overlayHoldTicks[idx] = 0
+                    }
+                }
+
                 let data = encoder.encodeGamepad(
                     controllerId: idx,
                     buttons: btns,
@@ -440,20 +468,6 @@ final class InputSender {
                     gamepadBitmap: gamepadBitmap
                 )
                 channel?.sendData(data)
-
-                // Long press Options → toggle stats overlay
-                if let pad = controller.extendedGamepad {
-                    let held = pad.buttonOptions?.isPressed ?? false
-                    if held {
-                        let ticks = (optionsHoldTicks[idx] ?? 0) + 1
-                        optionsHoldTicks[idx] = ticks
-                        if ticks == Self.optionsLongPressThreshold {
-                            menuToggleHandler?()
-                        }
-                    } else {
-                        optionsHoldTicks[idx] = 0
-                    }
-                }
             }
 
             // Only use the Siri Remote as a gamepad when no real controller is connected
@@ -463,7 +477,7 @@ final class InputSender {
         } else {
             // Mouse mode: extended controller is handed back to tvOS for system navigation.
             // Only the Siri Remote sends input to the game.
-            optionsHoldTicks.removeAll()
+            overlayHoldTicks.removeAll()
             if !isPaused, let remote = micro.first {
                 handleMicroGamepad(remote)
             }

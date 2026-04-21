@@ -757,6 +757,7 @@ extension GFNStreamController: LKRTCDataChannelDelegate {
             let sender = InputSender(channel: self)
             sender.setProtocolVersion(version)
             sender.deadzone = Float(self.settings.controllerDeadzone)
+            sender.overlayTriggerButton = self.settings.overlayTriggerButton
             sender.menuToggleHandler = { [weak self] in self?.handleMenuPress() }
             sender.onRemoteModeChanged = { [weak self] mode in
                 self?.remoteMode = mode
