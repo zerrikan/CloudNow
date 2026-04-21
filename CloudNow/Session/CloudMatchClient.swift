@@ -138,6 +138,7 @@ private func buildSessionRequestBody(_ input: SessionCreateRequest) -> [String: 
     let width = Int(resolutionParts.first ?? "1920") ?? 1920
     let height = Int(resolutionParts.last ?? "1080") ?? 1080
     let tzOffset = -TimeZone.current.secondsFromGMT() * 1000
+    let isHdr = input.settings.colorQuality == .hdr10bit
 
     return [
         "sessionRequestData": [
@@ -156,11 +157,11 @@ private func buildSessionRequestBody(_ input: SessionCreateRequest) -> [String: 
                 "widthInPixels": width,
                 "heightInPixels": height,
                 "framesPerSecond": input.settings.fps,
-                "sdrHdrMode": 0,
+                "sdrHdrMode": isHdr ? 1 : 0,
                 "displayData": [
-                    "desiredContentMaxLuminance": 0,
-                    "desiredContentMinLuminance": 0,
-                    "desiredContentMaxFrameAverageLuminance": 0,
+                    "desiredContentMaxLuminance": isHdr ? 1000 : 0,
+                    "desiredContentMinLuminance": isHdr ? 1 : 0,
+                    "desiredContentMaxFrameAverageLuminance": isHdr ? 400 : 0,
                 ],
                 "dpi": 100,
             ]],
@@ -175,8 +176,12 @@ private func buildSessionRequestBody(_ input: SessionCreateRequest) -> [String: 
                 ["key": "clientPhysicalResolution", "value": "{\"horizontalPixels\":\(width),\"verticalPixels\":\(height)}"],
                 ["key": "surroundAudioInfo", "value": "2"],
             ],
-            "sdrHdrMode": 0,
-            "clientDisplayHdrCapabilities": NSNull(),
+            "sdrHdrMode": isHdr ? 1 : 0,
+            "clientDisplayHdrCapabilities": isHdr ? [
+                "maxLuminance": 1000.0,
+                "minLuminance": 0.001,
+                "maxFrameAverageLuminance": 400.0,
+            ] : NSNull(),
             "surroundAudioInfo": 0,
             "remoteControllersBitmap": 0,
             "clientTimezoneOffset": tzOffset,
@@ -193,7 +198,7 @@ private func buildSessionRequestBody(_ input: SessionCreateRequest) -> [String: 
                 "cloudGsync": false,
                 "enabledL4S": input.settings.enableL4S,
                 "mouseMovementFlags": 0,
-                "trueHdr": false,
+                "trueHdr": isHdr,
                 "supportedHidDevices": 0,
                 "profile": 0,
                 "fallbackToLogicalResolution": false,
@@ -203,8 +208,8 @@ private func buildSessionRequestBody(_ input: SessionCreateRequest) -> [String: 
                 "prefilterSharpness": 0,
                 "prefilterNoiseReduction": 0,
                 "hudStreamingMode": 0,
-                "sdrColorSpace": 2,
-                "hdrColorSpace": 0,
+                "sdrColorSpace": isHdr ? 0 : 2,
+                "hdrColorSpace": isHdr ? 1 : 0,
             ],
         ],
     ]
