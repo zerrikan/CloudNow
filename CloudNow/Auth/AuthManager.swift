@@ -216,10 +216,26 @@ final class AuthManager {
                 updated.tokens.refreshToken = savedRefreshToken
             }
             print("[Auth] refresh via refresh_token grant succeeded")
+        } else if let idToken = s.tokens.idToken {
+            // Third path: the idToken is a longer-lived JWT (typically 30 days) that NVIDIA
+            // servers accept directly. Use it to fetch a fresh clientToken, then re-bind.
+            // This mirrors how the official GFN client recovers when the clientToken has expired
+            // and no refresh_token is available — it passes the idToken to /client_token.
+            print("[Auth] both primary paths unavailable, attempting idToken bootstrap")
+            guard let ct = try? await api.fetchClientToken(accessToken: idToken),
+                  let rebound = try? await api.refreshWithClientToken(ct.token, userId: s.user.userId)
+            else {
+                print("[Auth] refresh failed: idToken bootstrap also failed")
+                throw AuthError.tokenRefreshFailed("All refresh mechanisms exhausted.")
+            }
+            print("[Auth] refresh via idToken bootstrap succeeded")
+            let savedRefreshToken = updated.tokens.refreshToken
+            updated.tokens = rebound
+            if updated.tokens.refreshToken == nil {
+                updated.tokens.refreshToken = savedRefreshToken
+            }
         } else {
-            // Neither path available — surface a real error so the UI can prompt re-login
-            // instead of silently returning the expired token to callers.
-            print("[Auth] refresh failed: no usable clientToken or refreshToken available")
+            print("[Auth] refresh failed: no usable clientToken, refreshToken, or idToken available")
             throw AuthError.tokenRefreshFailed("All refresh mechanisms exhausted.")
         }
         // Re-bootstrap client token
