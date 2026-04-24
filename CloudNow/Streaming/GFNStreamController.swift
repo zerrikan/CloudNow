@@ -303,7 +303,10 @@ final class GFNStreamController: NSObject {
         } else {
             print("[Stream] Warning: no server IP available — offer c= lines left as 0.0.0.0")
         }
-        let remoteSDP = LKRTCSessionDescription(type: .offer, sdp: fixedSdp)
+        // Normalize H.265 fmtp in the offer before setRemoteDescription so WebRTC
+        // keeps H.265 in the generated answer (tier-flag and level-id must be valid).
+        let h265NormalizedSdp = SDPMunger.rewriteH265LevelId(SDPMunger.rewriteH265TierFlag(fixedSdp))
+        let remoteSDP = LKRTCSessionDescription(type: .offer, sdp: h265NormalizedSdp)
         do {
             try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
                 pc.setRemoteDescription(remoteSDP) { error in
